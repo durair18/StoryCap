@@ -1,0 +1,221 @@
+.popup-container {
+  min-width: 200px;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+#start-recording {
+  padding: 10px 20px;
+  font-size: 16px;
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  margin: 10px auto;
+  display: block;
+}
+
+.recorder-icon {
+  position: fixed;
+  top: 100px;
+  right: 20px;
+  z-index: 999999;
+  background: #111 !important;
+  border: 2px solid #fff !important;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 4px #fff, 0 2px 8px rgba(0,0,0,0.2);
+  cursor: pointer;
+  padding: 0;
+  font-size: 16px;
+  font-weight: bold;
+  color: #fff;
+  transition: background 0.2s, border-color 0.2s, transform 0.2s;
+  outline: none;
+  border-style: solid;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+
+.recorder-icon:hover, .recorder-icon:focus {
+  background: #222;
+  border-color: #fff;
+  transform: scale(1.05);
+}
+
+.blinking-dot {
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border-radius: 50%;
+  animation: blink 1s infinite;
+  display: inline-block;
+  border: none;
+  box-shadow: 0 0 8px 2px #fff;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+.editor-container {
+  padding: 20px;
+  background: #fafafa;
+  min-width: 400px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.screenshot-list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.screenshot-item {
+  margin-bottom: 20px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 600px;
+  width: 100%;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.screenshot-item img {
+  max-width: 100%;
+  max-height: 250px;
+  width: auto;
+  height: auto;
+  border: 2px solid #e53935;
+  border-radius: 4px;
+  object-fit: contain;
+  margin-bottom: 10px;
+}
+
+.screenshot-item textarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.delete-btn {
+  background: #f44336;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.delete-btn:hover {
+  background: #d32f2f;
+}
+
+#download-pdf {
+  background: #4caf50;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  margin: 20px auto;
+  display: block;
+  transition: background 0.2s;
+}
+
+#download-pdf:hover {
+  background: #388e3c;
+}
+
+#download-pdf:disabled {
+  background: #e0e0e0 !important;
+  color: #aaa !important;
+  cursor: not-allowed !important;
+  opacity: 0.7;
+  border: none;
+  box-shadow: none;
+}
+
+.highlight-box {
+  position: absolute;
+  border: 4px solid red;
+  pointer-events: none;
+  z-index: 999998;
+  background: rgba(255, 0, 0, 0.1);
+}
+
+.popup-container.horizontal {
+  flex-direction: row;
+  gap: 16px;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
+  min-height: 0;
+}
+
+.popup-container.horizontal button {
+  background: #fff !important;
+  border: 2px solid #e0e0e0;
+  padding: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s, transform 0.2s;
+  outline: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+.popup-container.horizontal button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.popup-container.horizontal button:hover:not(:disabled),
+.popup-container.horizontal button:focus:not(:disabled) {
+  background: #f0f0f0 !important;
+  transform: scale(1.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
+.popup-container.horizontal svg {
+  display: block;
+  margin: auto;
+  width: 28px;
+  height: 28px;
+}
+
+#record-btn svg circle {
+  stroke: #fff;
+  stroke-width: 2;
+} 
