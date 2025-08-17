@@ -1,10 +1,6 @@
-console.log('editor.js loaded');
-
 let steps = [];
 const list = document.getElementById('screenshot-list');
 const downloadBtn = document.getElementById('download-pdf');
-
-console.log('editor.js loaded 2');
 
 // Get steps from background script instead of storage
 chrome.runtime.sendMessage({ action: 'GET_STEPS' }, (response) => {
@@ -47,16 +43,5 @@ function renderList() {
 }
 
 downloadBtn.onclick = () => {
-  generatePDF();
-};
-
-function generatePDF() {
-  const { jsPDF } = window.jspdf;
-  const pdf = new jsPDF();
-  steps.forEach((step, idx) => {
-    if (idx > 0) pdf.addPage();
-    pdf.text(step.description, 10, 15);
-    pdf.addImage(step.screenshot, 'PNG', 10, 25, 180, 100, undefined, 'FAST');
-  });
-  pdf.save('recorded_steps.pdf');
-} 
+  chrome.runtime.sendMessage({ action: 'GENERATE_PDF', steps });
+}; 

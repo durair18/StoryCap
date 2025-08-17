@@ -19,8 +19,6 @@ let isContentScriptReady = false; // Flag to indicate content script is ready
 // This does NOT affect application navigation (SPA routing) which should retain recording state
 window.addEventListener('pageshow', (event) => {
   if (event.persisted) {
-    console.log('Page restored from browser back-forward cache - clearing recording state');
-    console.log('Note: This only affects browser navigation, not application navigation');
     isPageRestored = true;
     isContentScriptReady = false; // Reset ready state
     // Don't restore recording state if page was restored from browser cache
@@ -33,13 +31,9 @@ window.addEventListener('pageshow', (event) => {
     }
     stopScreenshotLoop();
     
-    // Clear background state to ensure consistency
-    chrome.runtime.sendMessage({ action: 'SET_TAB_STATE', isRecording: false, steps: [] });
-    
     // Set ready state after a short delay to allow message listeners to be established
     setTimeout(() => {
       isContentScriptReady = true;
-      console.log('Content script ready to receive messages after bfcache restoration');
     }, 200);
   } else {
     // If it's a normal navigation or reload, reset the flag
@@ -54,8 +48,6 @@ chrome.runtime.sendMessage({ action: 'GET_TAB_STATE' }, (state) => {
   // If page was restored from bfcache (browser back/forward), don't restore recording state
   // Application navigation (SPA routing) will still restore state as expected
   if (isPageRestored) {
-    console.log('Page restored from browser navigation - starting with clean state');
-    console.log('Application navigation would retain recording state here');
     isRecording = false;
     steps = [];
     hideRecorderIcon();
@@ -70,7 +62,6 @@ chrome.runtime.sendMessage({ action: 'GET_TAB_STATE' }, (state) => {
   // Check if we should restore recording state
   // Only restore if we have a valid state and it's actually recording
   if (state && state.isRecording && state.steps && state.steps.length > 0) {
-    console.log('Restoring recording state with', state.steps.length, 'steps');
     isRecording = true;
     steps = state.steps || [];
     showRecorderIcon();
@@ -80,7 +71,6 @@ chrome.runtime.sendMessage({ action: 'GET_TAB_STATE' }, (state) => {
     }
     startScreenshotLoop();
   } else {
-    console.log('Starting with clean state - no active recording');
     // Ensure we're in a clean state
     isRecording = false;
     steps = [];
@@ -99,7 +89,6 @@ chrome.runtime.sendMessage({ action: 'GET_TAB_STATE' }, (state) => {
     
     // Also update the background state to ensure consistency
     if (state && state.isRecording) {
-      console.log('Updating background state to stop recording');
       chrome.runtime.sendMessage({ action: 'SET_TAB_STATE', isRecording: false, steps: [] });
     }
   }
@@ -112,14 +101,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     currentTabId = sender.tab.id;
   }
   
-  console.log('Message received:', msg.action, 'from:', sender.tab ? 'content script' : 'background script', 'sender:', sender, 'ready:', isContentScriptReady);
-  
   // If content script isn't ready yet, handle messages appropriately
   if (!isContentScriptReady) {
-    console.log('Content script not ready yet, handling message:', msg.action);
-    
     if (msg.action === 'CHECK_RECORDING') {
-      console.log('CHECK_RECORDING received while not ready, returning false');
       try {
         sendResponse({ isRecording: false });
       } catch (error) {
@@ -129,10 +113,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     
     if (msg.action === 'START_RECORDING') {
-      console.log('START_RECORDING received while not ready, will process after ready');
-      // Queue this message to be processed when ready
       setTimeout(() => {
-        console.log('Processing queued START_RECORDING message');
         // Re-process the message
         chrome.runtime.onMessage._listeners.forEach(listener => {
           if (listener.toString().includes('START_RECORDING')) {
@@ -145,7 +126,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     
     // For other messages, return appropriate responses
     if (msg.action === 'SHOW_EDITOR_MODAL') {
-      console.log('SHOW_EDITOR_MODAL received while not ready, returning empty steps');
       sendResponse([]);
       return true;
     }
@@ -154,24 +134,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   
   if (msg.action === 'START_RECORDING') {
-    console.log('START_RECORDING received, justCleanedUp:', justCleanedUp, 'isRecording:', isRecording, 'isPageRestored:', isPageRestored);
-    console.log('Message sender details:', sender);
-    
-    // Check if we should allow starting recording
     if (isRecording) {
-      console.log('Already recording, ignoring START_RECORDING');
       return true;
     }
     
     // Check if we just cleaned up and should prevent restart
     if (justCleanedUp) {
-      console.log('Just cleaned up, ignoring START_RECORDING');
       return true;
     }
     
     // Check if we have any existing steps that might indicate a previous recording
     if (steps && steps.length > 0) {
-      console.log('Clearing', steps.length, 'existing steps before starting new recording');
       steps = [];
     }
     startRecording();
@@ -183,7 +156,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.action === 'CHECK_RECORDING') {
-    console.log('CHECK_RECORDING received, current isRecording:', isRecording);
     try {
       sendResponse({ isRecording });
     } catch (error) {
@@ -254,7 +226,6 @@ function startRecording() {
   if (isRecording) return;
   showCaptureStartedMessage();
   setTimeout(() => {
-    console.log('Starting recording');
     isRecording = true;
     steps = [];
     showRecorderIcon();
@@ -268,7 +239,6 @@ function startRecording() {
 }
 
 function stopRecording() {
-  console.log('Stopping recording with', steps.length, 'steps');
   isRecording = false;
   recordingStoppedAt = Date.now(); // Set timestamp when recording was stopped
   hideRecorderIcon();
@@ -283,7 +253,6 @@ function stopRecording() {
 }
 
 function cleanupRecordingState() {
-  console.log('Cleaning up recording state');
   isRecording = false;
   recordingStoppedAt = Date.now(); // Set timestamp when recording was stopped
   steps = []; // Clear the local steps array
@@ -308,7 +277,6 @@ function cleanupRecordingState() {
 }
 
 function cleanupModalState() {
-  console.log('Cleaning up modal state (keeping steps)');
   isRecording = false;
   recordingStoppedAt = Date.now(); // Set timestamp when recording was stopped
   hideRecorderIcon();
@@ -395,7 +363,6 @@ async function handleClick(e) {
   }
   // If we found a LI, use it; otherwise, use the original target
   if (!el || el === document.body) el = e.target;
-  console.log('Clicked element for capture:', el, 'Tag:', el.tagName);
   captureEvent(el);
 }
 
@@ -660,42 +627,52 @@ function injectEditorModal(steps) {
     contentArea.innerHTML = '<ul class="screenshot-list" id="modal-screenshot-list"></ul>';
     modal.appendChild(contentArea);
 
-    // Fixed Footer
+  // Fixed Footer
     const footer = document.createElement('div');
     footer.style.padding = '16px 24px 24px 24px';
     footer.style.borderTop = '1px solid #eee';
     footer.style.background = '#fff';
     footer.style.borderRadius = '0 0 12px 12px';
     footer.style.textAlign = 'center';
-    footer.innerHTML = '<button id="modal-download-pdf" disabled>Download as PDF</button>';
     modal.appendChild(footer);
 
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    // Inject minimal editor CSS (or you can inject styles.css if needed)
+      footer.innerHTML = `
+        <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+          <button id="modal-download-pdf" disabled>Export PDF</button>
+          <button id="modal-download-html" disabled>Export HTML</button>
+          <button id="modal-download-word" disabled>Export Word</button>
+        </div>
+      `;
     const style = document.createElement('style');
     style.textContent = `
       .screenshot-list { list-style: none; padding: 0; display: flex; flex-direction: column; align-items: center; }
       .screenshot-item { margin-bottom: 20px; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 15px; display: flex; flex-direction: column; align-items: center; max-width: 500px; width: 100%; box-shadow: 0 2px 4px rgba(0,0,0,0.1); position: relative; }
       .screenshot-item textarea { width: 100%; min-height: 40px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 10px; font-family: inherit; resize: vertical; }
-      .screenshot-item img { width: 100%; height: auto; max-height: 260px; border: none; border-radius: 4px; object-fit: contain; margin-bottom: 10px; }
+      .screenshot-item img { width: 100%; height: auto; max-height: 260px; border: 1px solid #e0e0e0; border-radius: 6px; object-fit: contain; margin-bottom: 10px; }
       .delete-icon { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; background: rgba(244, 67, 54, 0.9); color: white; border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; transition: all 0.2s; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
       .delete-icon:hover { background: rgba(211, 47, 47, 1); transform: scale(1.1); }
-      #modal-download-pdf { background: #4caf50; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; width: auto; min-width: 200px; margin: 0 auto; display: block; transition: background 0.2s; }
-      #modal-download-pdf:disabled { background: #e0e0e0 !important; color: #aaa !important; cursor: not-allowed !important; opacity: 0.7; border: none; box-shadow: none; }
-      #modal-download-pdf:hover:not(:disabled) { background: #388e3c; }
+      #modal-download-pdf, #modal-download-html, #modal-download-word { background: #4caf50; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; width: auto; min-width: 200px; margin: 0 auto; display: block; transition: background 0.2s; }
+      #modal-download-pdf:disabled, #modal-download-html:disabled, #modal-download-word:disabled { background: #e0e0e0 !important; color: #aaa !important; cursor: not-allowed !important; opacity: 0.7; border: none; box-shadow: none; }
+      #modal-download-pdf:hover:not(:disabled), #modal-download-html:hover:not(:disabled), #modal-download-word:hover:not(:disabled) { background: #388e3c; }
       @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     `;
     document.head.appendChild(style);
 
-    // Editor logic
-    let modalSteps = steps.slice();
-    const modalList = modal.querySelector('#modal-screenshot-list');
-    const modalDownloadBtn = modal.querySelector('#modal-download-pdf');
+  // Editor logic
+  let modalSteps = steps.slice();
+  const modalList = modal.querySelector('#modal-screenshot-list');
+  const modalDownloadBtn = modal.querySelector('#modal-download-pdf');
+  const modalDownloadHtmlBtn = modal.querySelector('#modal-download-html');
+  const modalDownloadWordBtn = modal.querySelector('#modal-download-word');
 
     function renderModalList() {
-      modalDownloadBtn.disabled = modalSteps.length === 0;
+  const any = modalSteps.length === 0;
+  modalDownloadBtn.disabled = any;
+  modalDownloadHtmlBtn.disabled = any;
+  modalDownloadWordBtn.disabled = any;
       modalList.innerHTML = '';
       if (modalSteps.length === 0) {
         const msg = document.createElement('div');
@@ -726,7 +703,10 @@ function injectEditorModal(steps) {
           modalList.appendChild(li);
         });
       }
-      modalDownloadBtn.disabled = modalSteps.length === 0;
+  const any2 = modalSteps.length === 0;
+  modalDownloadBtn.disabled = any2;
+  modalDownloadHtmlBtn.disabled = any2;
+  modalDownloadWordBtn.disabled = any2;
     }
 
     renderModalList();
@@ -765,6 +745,33 @@ function injectEditorModal(steps) {
         alert('Extension context error. Please reload the page and try again.');
       }
     };
+
+    function handleOtherExport(action, btn, label) {
+      const originalHTML = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span style="display: inline-block; width: 16px; height: 16px; border: 2px solid #ffffff; border-radius: 50%; border-top-color: transparent; animation: spin 1s linear infinite; margin-right: 8px;"></span>' + `Generating ${label}...`;
+      try {
+        chrome.runtime.sendMessage({ action, steps: modalSteps }, (response) => {
+          btn.disabled = modalSteps.length === 0;
+          btn.innerHTML = originalHTML;
+          if (chrome.runtime.lastError) {
+            alert(`Error generating ${label}. Please try again.`);
+            return;
+          }
+          if (!response || !response.success) {
+            alert(`Error generating ${label}: ` + (response ? response.error : 'Unknown error'));
+          }
+        });
+      } catch (error) {
+        btn.disabled = modalSteps.length === 0;
+        btn.innerHTML = originalHTML;
+        alert('Extension context error. Please reload the page and try again.');
+      }
+    }
+
+    // Hook buttons
+    modalDownloadHtmlBtn.onclick = () => handleOtherExport('GENERATE_HTML', modalDownloadHtmlBtn, 'HTML');
+    modalDownloadWordBtn.onclick = () => handleOtherExport('GENERATE_WORD', modalDownloadWordBtn, 'Word');
   }
 
   // Show modal immediately without jsPDF loading

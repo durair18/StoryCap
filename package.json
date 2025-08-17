@@ -16,6 +16,6 @@
     "vite": "^7.0.0"
   },
   "dependencies": {
-    "jspdf": "^3.0.1"
+    "pdf-lib": "^1.17.1"
   }
 }

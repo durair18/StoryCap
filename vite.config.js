@@ -7,11 +7,15 @@ export default defineConfig({
         background: 'background.js'
       },
       output: {
-        entryFileNames: 'background.bundle.js'
+        entryFileNames: 'background.bundle.js',
+        format: 'es'
       }
     },
     outDir: './dist',
     emptyOutDir: false,
     target: 'esnext',
+  },
+  optimizeDeps: {
+    exclude: ['pdf-lib']
   }
 }); 
