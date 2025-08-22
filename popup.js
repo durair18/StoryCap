@@ -6,13 +6,10 @@ const statusText = document.getElementById('status-text');
 const stepsBadge = document.getElementById('steps-count-badge');
 
 // Check if a recording is in progress (by checking for the recorder icon in the active tab)
-chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-  const currentTab = tabs[0];
-  
-  // Check both content script and background script states
+function updatePopupState(tabId) {
   Promise.all([
     new Promise((resolve) => {
-      chrome.tabs.sendMessage(currentTab.id, {action: 'CHECK_RECORDING'}, (response) => {
+      chrome.tabs.sendMessage(tabId, {action: 'CHECK_RECORDING'}, (response) => {
         if (chrome.runtime.lastError) {
           resolve({ error: chrome.runtime.lastError });
         } else {
@@ -21,16 +18,16 @@ chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
       });
     }),
     new Promise((resolve) => {
-      chrome.runtime.sendMessage({ action: 'GET_TAB_STATE', tabId: currentTab.id }, (state) => {
+      chrome.runtime.sendMessage({ action: 'GET_TAB_STATE', tabId }, (state) => {
         resolve({ 
           backgroundRecording: state?.isRecording || false,
-          stepsCount: state?.steps?.length || 0
+          stepsCount: state?.steps?.length || 0,
+          editorOpen: state?.editorOpen || false
         });
       });
     })
   ]).then(([contentState, backgroundState]) => {
     if (contentState.error) {
-      // Content script not present (e.g., new tab, chrome:// page)
       recordBtn.disabled = true;
       recordBtn.title = 'This page does not support recording.';
       stepsBtn.style.display = 'none';
@@ -39,8 +36,6 @@ chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
       statusText.textContent = 'Unavailable';
       return;
     }
-    
-    // Use content script state as primary, but log background state for debugging
     if (contentState.contentRecording) {
       recordBtn.disabled = true;
       recordBtn.title = 'Recording...';
@@ -52,10 +47,13 @@ chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
       statusChip.className = 'status status-ready';
       statusText.textContent = 'Ready';
     }
-    
-    // Show steps/delete buttons if we have steps
     if (backgroundState.stepsCount > 0) {
-      stepsBtn.style.display = '';
+      // If editor is currently open, hide steps button (or disable)
+      if (backgroundState.editorOpen) {
+        stepsBtn.style.display = 'none';
+      } else {
+        stepsBtn.style.display = '';
+      }
       deleteBtn.style.display = '';
       stepsBadge.hidden = false;
       stepsBadge.textContent = String(backgroundState.stepsCount);
@@ -69,6 +67,13 @@ chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
       stepsBadge.hidden = true;
     }
   });
+}
+
+chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+  const currentTab = tabs[0];
+  updatePopupState(currentTab.id);
+  // Re-check shortly after open in case SET_TAB_STATE just landed
+  setTimeout(() => updatePopupState(currentTab.id), 150);
 });
 
 function waitForContentScript(tabId, maxRetries = 10, delay = 100) {
@@ -139,11 +144,16 @@ stepsBtn.addEventListener('click', () => {
 
 deleteBtn.addEventListener('click', () => {
   chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-    chrome.runtime.sendMessage({ action: 'DELETE_STEPS', tabId: tabs[0].id }, () => {
-      stepsBtn.style.display = 'none';
-      deleteBtn.style.display = 'none';
-  if (stepsBadge) stepsBadge.hidden = true;
-  if (statusChip && statusText) { statusChip.className = 'status status-ready'; statusText.textContent = 'Ready'; }
+    const tabId = tabs[0].id;
+    // Ask content script to close the editor if open
+    chrome.tabs.sendMessage(tabId, { action: 'CLOSE_EDITOR_MODAL' }, () => {
+      // Regardless of error, clear steps in background
+      chrome.runtime.sendMessage({ action: 'DELETE_STEPS', tabId }, () => {
+        stepsBtn.style.display = 'none';
+        deleteBtn.style.display = 'none';
+        if (stepsBadge) stepsBadge.hidden = true;
+        if (statusChip && statusText) { statusChip.className = 'status status-ready'; statusText.textContent = 'Ready'; }
+      });
     });
   });
 });

@@ -58,10 +58,9 @@ chrome.runtime.sendMessage({ action: 'GET_TAB_STATE' }, (state) => {
     stopScreenshotLoop();
     return;
   }
-  
-  // Check if we should restore recording state
-  // Only restore if we have a valid state and it's actually recording
-  if (state && state.isRecording && state.steps && state.steps.length > 0) {
+
+  // Restore recording state after a reload if background says we're recording
+  if (state && state.isRecording) {
     isRecording = true;
     steps = state.steps || [];
     showRecorderIcon();
@@ -71,26 +70,15 @@ chrome.runtime.sendMessage({ action: 'GET_TAB_STATE' }, (state) => {
     }
     startScreenshotLoop();
   } else {
-    // Ensure we're in a clean state
+    // Not recording; keep any existing steps reference from background for the editor later
     isRecording = false;
-    steps = [];
+    steps = state && state.steps ? state.steps : [];
     hideRecorderIcon();
     if (clickListenerAttached) {
       document.removeEventListener('click', handleClick, true);
       clickListenerAttached = false;
     }
     stopScreenshotLoop();
-    
-    // Set flag to prevent immediate restart
-    justCleanedUp = true;
-    setTimeout(() => {
-      justCleanedUp = false;
-    }, 2000); // Prevent restart for 2 seconds
-    
-    // Also update the background state to ensure consistency
-    if (state && state.isRecording) {
-      chrome.runtime.sendMessage({ action: 'SET_TAB_STATE', isRecording: false, steps: [] });
-    }
   }
 });
 
@@ -143,9 +131,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return true;
     }
     
-    // Check if we have any existing steps that might indicate a previous recording
-    if (steps && steps.length > 0) {
-      steps = [];
+    // If editor is open, close it
+    const existingOverlay = document.getElementById('editor-modal-overlay');
+    if (existingOverlay) {
+      existingOverlay.remove();
+      try {
+        chrome.runtime.sendMessage({ action: 'SET_TAB_STATE', isRecording: false, steps: steps || [], editorOpen: false });
+      } catch (e) {
+        // ignore
+      }
+    }
+    // Clear any previous steps locally and in background before starting fresh
+    steps = [];
+    try {
+      chrome.runtime.sendMessage({ action: 'SET_TAB_STATE', isRecording: false, steps: [], editorOpen: false });
+    } catch (e) {
+      // ignore
     }
     startRecording();
     try {
@@ -171,6 +172,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
     });
     return true; // Keep message channel open for async response
+  }
+  if (msg.action === 'CLOSE_EDITOR_MODAL') {
+    const existing = document.getElementById('editor-modal-overlay');
+    if (existing) {
+      existing.remove();
+    }
+    // Clear local steps as part of a global clear, and mark editor closed
+    steps = [];
+    try {
+      chrome.runtime.sendMessage({ action: 'SET_TAB_STATE', isRecording: false, steps: [], editorOpen: false });
+    } catch (e) {
+      // ignore
+    }
+    try { sendResponse({ success: true }); } catch (_) {}
+    return true;
   }
   if (msg.action === 'PAGE_NAVIGATED') {
     if (isRecording) {
@@ -234,7 +250,7 @@ function startRecording() {
       clickListenerAttached = true;
     }
     startScreenshotLoop();
-    chrome.runtime.sendMessage({ action: 'SET_TAB_STATE', isRecording: true, steps: [] });
+  chrome.runtime.sendMessage({ action: 'SET_TAB_STATE', isRecording: true, steps: [], editorOpen: false });
   }, 1600); // Wait for the fade-out duration
 }
 
@@ -246,10 +262,17 @@ function stopRecording() {
     document.removeEventListener('click', handleClick, true);
     clickListenerAttached = false;
   }
-  // Immediately clear background state to prevent restoration on navigation
-  chrome.runtime.sendMessage({ action: 'SET_TAB_STATE', isRecording: false, steps: [] });
+  // Keep steps in background so popup can reflect Steps/Delete while editor is open
   stopScreenshotLoop();
-  injectEditorModal(steps);
+  chrome.runtime.sendMessage({ action: 'SET_TAB_STATE', isRecording: false, steps }, () => {
+    // After background acknowledges, open the editor
+    try {
+      injectEditorModal(steps);
+    } catch (e) {
+      // Fallback: open anyway
+      injectEditorModal(steps);
+    }
+  });
 }
 
 function cleanupRecordingState() {
@@ -595,12 +618,12 @@ function injectEditorModal(steps) {
     closeBtn.style.cursor = 'pointer';
     closeBtn.style.color = '#888';
     closeBtn.style.zIndex = '10';
-    closeBtn.onclick = () => {
+  closeBtn.onclick = () => {
       try {
         // First, clean up local state
         cleanupModalState();
         // Then update background state - keep steps but stop recording
-        chrome.runtime.sendMessage({ action: 'SET_TAB_STATE', isRecording: false, steps: modalSteps }, (response) => {
+    chrome.runtime.sendMessage({ action: 'SET_TAB_STATE', isRecording: false, steps: modalSteps, editorOpen: false }, (response) => {
         });
       } catch (e) {
         // Ignore extension context errors
@@ -643,7 +666,6 @@ function injectEditorModal(steps) {
         <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
           <button id="modal-download-pdf" disabled>Export PDF</button>
           <button id="modal-download-html" disabled>Export HTML</button>
-          <button id="modal-download-word" disabled>Export Word</button>
         </div>
       `;
     const style = document.createElement('style');
@@ -666,13 +688,11 @@ function injectEditorModal(steps) {
   const modalList = modal.querySelector('#modal-screenshot-list');
   const modalDownloadBtn = modal.querySelector('#modal-download-pdf');
   const modalDownloadHtmlBtn = modal.querySelector('#modal-download-html');
-  const modalDownloadWordBtn = modal.querySelector('#modal-download-word');
 
     function renderModalList() {
   const any = modalSteps.length === 0;
   modalDownloadBtn.disabled = any;
   modalDownloadHtmlBtn.disabled = any;
-  modalDownloadWordBtn.disabled = any;
       modalList.innerHTML = '';
       if (modalSteps.length === 0) {
         const msg = document.createElement('div');
@@ -706,10 +726,16 @@ function injectEditorModal(steps) {
   const any2 = modalSteps.length === 0;
   modalDownloadBtn.disabled = any2;
   modalDownloadHtmlBtn.disabled = any2;
-  modalDownloadWordBtn.disabled = any2;
     }
 
     renderModalList();
+
+    // Mark editor as open in background state
+    try {
+      chrome.runtime.sendMessage({ action: 'SET_TAB_STATE', isRecording: false, steps: modalSteps, editorOpen: true });
+    } catch (e) {
+      // ignore
+    }
 
     modalDownloadBtn.onclick = () => {
       // Show loading state
@@ -770,8 +796,7 @@ function injectEditorModal(steps) {
     }
 
     // Hook buttons
-    modalDownloadHtmlBtn.onclick = () => handleOtherExport('GENERATE_HTML', modalDownloadHtmlBtn, 'HTML');
-    modalDownloadWordBtn.onclick = () => handleOtherExport('GENERATE_WORD', modalDownloadWordBtn, 'Word');
+  modalDownloadHtmlBtn.onclick = () => handleOtherExport('GENERATE_HTML', modalDownloadHtmlBtn, 'HTML');
   }
 
   // Show modal immediately without jsPDF loading

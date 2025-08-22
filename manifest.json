@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "StoryCap",
-  "version": "1.0",
+  "version": "2.1",
   "description": "Capture screenshots with event descriptions and highlights, edit steps, and export as PDF.",
   "permissions": [
     "tabs",

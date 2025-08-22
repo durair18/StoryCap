@@ -104,15 +104,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.action === 'DELETE_STEPS') {
-    if (tabId && tabState[tabId]) {
+    if (tabId) {
+      tabState[tabId] = tabState[tabId] || { isRecording: false, steps: [], editorOpen: false };
       tabState[tabId].steps = [];
+      // Also mark editor as closed if it was open
+      tabState[tabId].editorOpen = false;
     }
     sendResponse({ success: true });
     return true;
   }
   if (msg.action === 'UPDATE_STEPS') {
     if (tabId) {
-      tabState[tabId] = tabState[tabId] || { isRecording: false, steps: [] };
+      tabState[tabId] = tabState[tabId] || { isRecording: false, steps: [], editorOpen: false };
       tabState[tabId].steps = msg.steps;
     }
     sendResponse({ success: true });
@@ -120,9 +123,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.action === 'SET_TAB_STATE') {
     if (tabId) {
-      tabState[tabId] = tabState[tabId] || { isRecording: false, steps: [] };
+      tabState[tabId] = tabState[tabId] || { isRecording: false, steps: [], editorOpen: false };
       tabState[tabId].isRecording = msg.isRecording;
       tabState[tabId].steps = msg.steps;
+      if (typeof msg.editorOpen === 'boolean') {
+        tabState[tabId].editorOpen = msg.editorOpen;
+      }
       
       // If stopping recording, set the timestamp
       if (!msg.isRecording) {
@@ -134,21 +140,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.action === 'GET_TAB_STATE') {
     if (tabId && tabState[tabId]) {
-      // Check if recording was recently stopped (within 5 seconds)
-      const timeSinceStopped = Date.now() - (tabState[tabId].recordingStoppedAt || 0);
-      if (tabState[tabId].isRecording && timeSinceStopped <= 5000) {
-        sendResponse({ isRecording: false, steps: [] });
-      } else {
-        sendResponse(tabState[tabId]);
+      // If not recording, we may want to treat the state as clean shortly after stop
+      if (!tabState[tabId].isRecording) {
+        const timeSinceStopped = Date.now() - (tabState[tabId].recordingStoppedAt || 0);
+        if (timeSinceStopped <= 5000) {
+          sendResponse({ isRecording: false, steps: tabState[tabId].steps || [], editorOpen: tabState[tabId].editorOpen || false });
+          return true;
+        }
       }
+      sendResponse(tabState[tabId]);
     } else {
-      sendResponse({ isRecording: false, steps: [] });
+      sendResponse({ isRecording: false, steps: [], editorOpen: false });
     }
     return true;
   }
   if (msg.action === 'ADD_NAVIGATION_EVENT') {
     if (tabId) {
-      tabState[tabId] = tabState[tabId] || { isRecording: false, steps: [] };
+      tabState[tabId] = tabState[tabId] || { isRecording: false, steps: [], editorOpen: false };
       tabState[tabId].steps.push(msg.step);
     }
     sendResponse({ success: true });
@@ -256,26 +264,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  if (msg.action === 'GENERATE_HTML' || msg.action === 'GENERATE_WORD') {
+  if (msg.action === 'GENERATE_HTML') {
     try {
       const steps = msg.steps || [];
       const docTitle = 'Recorded Steps';
+      const containerMax = 840; // px
       const html = `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${docTitle}</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #111827; background: #ffffff; margin: 24px; }
-    .container { max-width: 840px; margin: 0 auto; }
+    .container { max-width: ${containerMax}px; margin: 0 auto; }
     h1 { font-size: 22px; margin: 0 0 16px 0; }
     .step { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
     .step h2 { font-size: 16px; margin: 0 0 8px 0; color: #111827; }
     .desc { font-size: 14px; margin-bottom: 12px; color: #374151; white-space: pre-wrap; }
-    img.step-img { width: 100%; height: auto; border: 1px solid #e5e7eb; border-radius: 6px; }
+    img.step-img { width: 100%; max-width: 100%; height: auto; border: 1px solid #e5e7eb; border-radius: 6px; display: block; }
   </style>
-  ${msg.action === 'GENERATE_WORD' ? '<xml><w:wordDocument xmlns:w="http://schemas.microsoft.com/office/word/2003/wordml"></w:wordDocument></xml>' : ''}
   
 </head>
 <body>
@@ -285,15 +294,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       <div class="step">
         <h2>Step ${i + 1}</h2>
         <div class="desc">${(s.description || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
-        ${s.screenshot ? `<img class="step-img" src="${s.screenshot}" alt="Step ${i + 1}" />` : ''}
+        ${s.screenshot ? `<img class=\"step-img\" src=\"${s.screenshot}\" alt=\"Step ${i + 1}\" />` : ''}
       </div>
     `).join('')}
   </div>
 </body>
 </html>`;
-
-      const mime = msg.action === 'GENERATE_WORD' ? 'application/msword' : 'text/html';
-      const ext = msg.action === 'GENERATE_WORD' ? 'doc' : 'html';
+      const mime = 'text/html';
+      const ext = 'html';
       const dataUrl = `data:${mime};charset=utf-8,` + encodeURIComponent(html);
       chrome.downloads.download({
         url: dataUrl,
